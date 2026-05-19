@@ -1,14 +1,38 @@
 // controllers/galeri.controller.js
 const prisma = require('../utils/prisma');
-const path = require('path');
-const fs   = require('fs');
+const supabase = require('../utils/supabase');
 
-const getImageUrl = (req) => {
-  if (req.file) {
-    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-    return `${baseUrl}/uploads/galeri/${req.file.filename}`;
+const BUCKET = 'galeri'; // nama bucket di Supabase Storage
+
+// Helper: upload buffer ke Supabase Storage, return public URL
+const uploadToSupabase = async (file) => {
+  const ext = file.originalname.split('.').pop();
+  const filename = `galeri_${Date.now()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(filename, file.buffer, {
+      contentType: file.mimetype,
+      upsert: false,
+    });
+
+  if (error) throw new Error('Upload ke Supabase gagal: ' + error.message);
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(filename);
+  return data.publicUrl;
+};
+
+// Helper: hapus file dari Supabase Storage berdasarkan public URL
+const deleteFromSupabase = async (imageUrl) => {
+  try {
+    // Ambil nama file dari URL
+    const url = new URL(imageUrl);
+    const parts = url.pathname.split('/');
+    const filename = parts[parts.length - 1];
+    await supabase.storage.from(BUCKET).remove([filename]);
+  } catch (e) {
+    console.warn('Gagal hapus file dari Supabase:', e.message);
   }
-  return req.body.imageUrl || null;
 };
 
 // GET publik
@@ -40,11 +64,18 @@ const getAllGaleri = async (req, res) => {
 const createGaleri = async (req, res) => {
   try {
     const { judul, deskripsi, urutan, aktif } = req.body;
-    const imageUrl = getImageUrl(req);
+
+    let imageUrl = req.body.imageUrl || null;
+
+    // Kalau ada file upload, kirim ke Supabase
+    if (req.file) {
+      imageUrl = await uploadToSupabase(req.file);
+    }
+
     if (!judul || !imageUrl) {
-      if (req.file) fs.unlinkSync(req.file.path);
       return res.status(400).json({ success: false, message: 'Judul dan gambar wajib diisi.' });
     }
+
     const galeri = await prisma.galeri.create({
       data: {
         judul,
@@ -54,9 +85,9 @@ const createGaleri = async (req, res) => {
         aktif: aktif !== undefined ? (aktif === 'true' || aktif === true) : true,
       },
     });
+
     res.status(201).json({ success: true, data: galeri, message: 'Foto berhasil ditambahkan.' });
   } catch (err) {
-    if (req.file) fs.unlinkSync(req.file.path);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -66,30 +97,38 @@ const updateGaleri = async (req, res) => {
   try {
     const { id } = req.params;
     const { judul, deskripsi, urutan, aktif } = req.body;
+
     const existing = await prisma.galeri.findUnique({ where: { id: Number(id) } });
-    let imageUrl = req.body.imageUrl;
-    if (req.file) {
-      if (existing && existing.imageUrl && existing.imageUrl.includes('/uploads/galeri/')) {
-        const oldPath = path.join(__dirname, '..', 'uploads', 'galeri', path.basename(existing.imageUrl));
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-      const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-      imageUrl = `${baseUrl}/uploads/galeri/${req.file.filename}`;
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Galeri tidak ditemukan.' });
     }
+
+    let imageUrl = req.body.imageUrl || existing.imageUrl;
+
+    // Kalau ada file baru, upload ke Supabase & hapus yang lama
+    if (req.file) {
+      // Hapus foto lama dari Supabase (kalau bukan URL eksternal)
+      if (existing.imageUrl && existing.imageUrl.includes('supabase')) {
+        await deleteFromSupabase(existing.imageUrl);
+      }
+      imageUrl = await uploadToSupabase(req.file);
+    }
+
     const updateData = {
       judul,
       deskripsi: deskripsi || null,
-      urutan: urutan !== undefined ? Number(urutan) : undefined,
-      aktif: aktif !== undefined ? (aktif === 'true' || aktif === true) : undefined,
+      imageUrl,
+      urutan: urutan !== undefined ? Number(urutan) : existing.urutan,
+      aktif: aktif !== undefined ? (aktif === 'true' || aktif === true) : existing.aktif,
     };
-    if (imageUrl) updateData.imageUrl = imageUrl;
+
     const galeri = await prisma.galeri.update({
       where: { id: Number(id) },
       data: updateData,
     });
+
     res.json({ success: true, data: galeri, message: 'Foto berhasil diperbarui.' });
   } catch (err) {
-    if (req.file) fs.unlinkSync(req.file.path);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -99,10 +138,11 @@ const deleteGaleri = async (req, res) => {
   try {
     const { id } = req.params;
     const existing = await prisma.galeri.findUnique({ where: { id: Number(id) } });
-    if (existing && existing.imageUrl && existing.imageUrl.includes('/uploads/galeri/')) {
-      const filePath = path.join(__dirname, '..', 'uploads', 'galeri', path.basename(existing.imageUrl));
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    if (existing && existing.imageUrl && existing.imageUrl.includes('supabase')) {
+      await deleteFromSupabase(existing.imageUrl);
     }
+
     await prisma.galeri.delete({ where: { id: Number(id) } });
     res.json({ success: true, message: 'Foto berhasil dihapus.' });
   } catch (err) {
