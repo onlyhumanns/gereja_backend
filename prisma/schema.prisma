@@ -1,0 +1,104 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x", "linux-musl"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  nama      String
+  email     String   @unique
+  password  String
+  role      Role     @default(MAJELIS)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Terhubung {
+  id             Int      @id @default(autoincrement())
+  namaLengkap    String
+  nomorHp        String
+  alamat         String
+  email          String?
+  jenisPelayanan String
+  keterangan     String?
+  status         String   @default("Pending")
+  createdAt      DateTime @default(now())
+
+  @@map("terhubung")
+}
+
+model JadwalIbadah {
+  id           Int          @id @default(autoincrement())
+  namaIbadah   String
+  tanggal      DateTime
+  waktuMulai   String
+  waktuSelesai String
+  lokasi       String
+  tema         String?
+  pengkhotbah  String?
+  liturgos     String?
+  pemainMusik  String?
+  keterangan   String?
+  status       StatusIbadah @default(TERJADWAL)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@map("jadwal_ibadah")
+}
+
+model Galeri {
+  id        Int      @id @default(autoincrement())
+  judul     String
+  deskripsi String?
+  imageUrl  String   @db.Text
+  urutan    Int      @default(0)
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("galeri")
+}
+
+model Pengumuman {
+  id        Int      @id @default(autoincrement())
+  judul     String
+  isi       String   @db.Text
+  tanggal   DateTime
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("pengumuman")
+}
+
+model LiveStreaming {
+  id         Int      @id @default(autoincrement())
+  judul      String
+  youtubeUrl String
+  deskripsi  String?
+  aktif      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("live_streaming")
+}
+
+enum Role {
+  ADMIN
+  MAJELIS
+}
+
+enum StatusIbadah {
+  TERJADWAL
+  BERLANGSUNG
+  SELESAI
+  DIBATALKAN
+}

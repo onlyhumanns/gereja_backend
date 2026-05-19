@@ -1,0 +1,76 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// MODEL USER (Admin / Majelis)
+// ============================================================
+model User {
+  id        Int      @id @default(autoincrement())
+  nama      String
+  email     String   @unique
+  password  String
+  role      Role     @default(MAJELIS)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  MAJELIS
+}
+
+// ============================================================
+// MODEL TERHUBUNG
+// ============================================================
+model Terhubung {
+  id             Int      @id @default(autoincrement())
+  namaLengkap    String
+  nomorHp        String
+  alamat         String
+  email          String?
+  jenisPelayanan String
+  keterangan     String?
+  status         String   @default("Pending")
+  createdAt      DateTime @default(now())
+
+  @@map("terhubung")
+}
+
+// ============================================================
+// MODEL JADWAL IBADAH
+// ============================================================
+model JadwalIbadah {
+  id           Int          @id @default(autoincrement())
+  namaIbadah   String
+  tanggal      DateTime
+  waktuMulai   String
+  waktuSelesai String
+  lokasi       String
+  tema         String?
+  pengkhotbah  String?
+  liturgos     String?
+  pemainMusik  String?
+  keterangan   String?
+  status       StatusIbadah @default(TERJADWAL)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@map("jadwal_ibadah")
+}
+
+enum StatusIbadah {
+  TERJADWAL
+  BERLANGSUNG
+  SELESAI
+  DIBATALKAN
+}
