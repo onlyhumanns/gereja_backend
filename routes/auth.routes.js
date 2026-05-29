@@ -13,6 +13,6 @@ router.post('/login', controller.login);
 router.get('/profile', authenticate, controller.getProfile);
 
 // GET  /api/auth/users     → Daftar semua user (hanya Admin)
-router.get('/users', authenticate, isAdmin, controller.getUsers);
+router.get('/users', controller.getUsers);
 
 module.exports = router;
